@@ -17,21 +17,21 @@ RUN npm run build
 # Stage 2: Production
 FROM nginx:alpine
 
+# Remove default nginx config
+RUN rm /etc/nginx/conf.d/default.conf
+
 # Copy custom nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/conf.d/
 
 # Copy built React app from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Create non-root user
-RUN addgroup -g 1001 -S appgroup && \
-    adduser -u 1001 -S appuser -G appgroup
+# Set proper permissions
+RUN chown -R nginx:nginx /usr/share/nginx/html && \
+    chmod -R 755 /usr/share/nginx/html
 
-# Change ownership
-RUN chown -R appuser:appgroup /usr/share/nginx/html
-RUN chmod -R 755 /usr/share/nginx/html
-
-USER appuser
+# Use nginx user (already exists in nginx:alpine image)
+USER nginx
 
 EXPOSE 80
 
