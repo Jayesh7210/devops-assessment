@@ -14,7 +14,6 @@ ENV VITE_API_URL=$VITE_API_URL
 
 RUN npm run build
 
-# -------------------
 # Runtime stage
 FROM nginx:alpine
 

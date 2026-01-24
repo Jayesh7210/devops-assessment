@@ -35,16 +35,16 @@ jobs:
       - name: Run Containers for Testing
         run: |
           docker-compose -f docker-compose.test.yml up -d
-          sleep 30  # Increased sleep time for containers to start
+          sleep 30
           
           echo "Checking running containers..."
           docker-compose -f docker-compose.test.yml ps
           
           echo "Testing backend API..."
-          curl --retry 5 --retry-delay 10 -f http://localhost:8000/api/hello/ || exit 1
+          curl --retry 3 --retry-delay 5 -f http://localhost:8000/api/hello/ || exit 1
           
           echo "Testing frontend..."
-          curl --retry 5 --retry-delay 10 -f http://localhost:80 || exit 1
+          curl --retry 3 --retry-delay 5 -f http://localhost:80 || exit 1
           
           echo "✅ All tests passed!"
 
@@ -109,20 +109,23 @@ jobs:
 
           echo "🚀 Starting deployment..."
 
-          # Get EC2 IP from metadata or use provided IP
-          EC2_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo "$EC2_IP_FROM_SECRETS")
+          # Get EC2 IP
+          EC2_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
           echo "EC2 Public IP: $EC2_IP"
 
           # Login to Docker Hub
           echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+
+          # Create Docker network for communication
+          docker network create app-network 2>/dev/null || true
 
           # Stop and remove old containers
           echo "Stopping old containers..."
           docker stop django_backend_prod react_frontend_prod 2>/dev/null || true
           docker rm django_backend_prod react_frontend_prod 2>/dev/null || true
 
-          # Remove old images to save space
-          docker image prune -f
+          # Cleanup
+          docker system prune -f
 
           echo "Pulling latest images..."
           docker pull $DOCKER_USERNAME/django-backend:latest
@@ -131,6 +134,7 @@ jobs:
           echo "Starting backend..."
           docker run -d \
             --name django_backend_prod \
+            --network app-network \
             -p 8000:8000 \
             -e DEBUG=False \
             -e DJANGO_ALLOWED_HOSTS="localhost,127.0.0.1,$EC2_IP,*" \
@@ -138,10 +142,10 @@ jobs:
             $DOCKER_USERNAME/django-backend:latest
 
           echo "Waiting for backend to start..."
-          sleep 30
+          sleep 35
 
           echo "Checking backend health..."
-          if curl -f http://localhost:8000/api/hello/; then
+          if curl --retry 3 --retry-delay 5 -f http://localhost:8000/api/hello/; then
             echo "✅ Backend is healthy!"
           else
             echo "❌ Backend health check failed!"
@@ -152,16 +156,17 @@ jobs:
           echo "Starting frontend..."
           docker run -d \
             --name react_frontend_prod \
+            --network app-network \
             -p 80:80 \
             -e VITE_API_URL="http://$EC2_IP:8000" \
             --restart unless-stopped \
             $DOCKER_USERNAME/react-frontend:latest
 
           echo "Waiting for frontend to start..."
-          sleep 10
+          sleep 15
 
           echo "Checking frontend..."
-          if curl -f http://localhost:80; then
+          if curl --retry 3 --retry-delay 5 -f http://localhost:80; then
             echo "✅ Frontend is running!"
           else
             echo "❌ Frontend check failed!"
@@ -195,11 +200,8 @@ jobs:
             export DOCKER_USERNAME="${{ secrets.DOCKER_USERNAME }}"
             export DOCKER_PASSWORD="${{ secrets.DOCKER_PASSWORD }}"
             
-            # Make sure we're in home directory
             cd /home/ubuntu
             
-            # Make script executable
             chmod +x deploy.sh
             
-            # Run deployment
             ./deploy.sh
