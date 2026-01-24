@@ -42,7 +42,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 
 # Expose port
 EXPOSE 8000
-ENV DJANGO_ALLOWED_HOSTS="*"  # Add this line!
+ENV DJANGO_ALLOWED_HOSTS="*"  
 
 # Health check and run
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
