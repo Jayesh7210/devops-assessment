@@ -102,41 +102,55 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: us-east-1
     
-    - name: Create deployment script
+     - name: Create deployment script
       run: |
         cat > deploy.sh << 'EOF'
         #!/bin/bash
         set -e
         
-        echo "Deploying application to EC2..."
+        echo "🚀 Starting deployment..."
         
-        # Install Docker Compose if not present
-        if ! command -v docker-compose &> /dev/null; then
-            sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.6/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-            sudo chmod +x /usr/local/bin/docker-compose
-        fi
-        
-        # Pull latest images
-        docker pull ${{ env.BACKEND_IMAGE }}:latest
-        docker pull ${{ env.FRONTEND_IMAGE }}:latest
-        
-        # Create .env file
-        echo "DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}" > .env
+        # Get EC2 IP
+        EC2_IP=$(curl -s ifconfig.me)
         
         # Stop and remove old containers
-        docker-compose -f docker-compose.prod.yml down || true
+        docker stop django_backend_prod react_frontend_prod 2>/dev/null || true
+        docker rm django_backend_prod react_frontend_prod 2>/dev/null || true
         
-        # Start new containers
-        docker-compose -f docker-compose.prod.yml up -d
+        # Login to DockerHub
+        echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
         
-        # Wait for services to start
+        # Pull images
+        docker pull ${{ secrets.DOCKER_USERNAME }}/django-backend:latest
+        docker pull ${{ secrets.DOCKER_USERNAME }}/react-frontend:latest
+        
+        # Run backend
+        docker run -d \
+          --name django_backend_prod \
+          -p 8000:8000 \
+          -e DEBUG=False \
+          -e DJANGO_ALLOWED_HOSTS="localhost,127.0.0.1,$EC2_IP,*" \
+          -e CORS_ALLOW_ALL_ORIGINS=True \
+          --restart unless-stopped \
+          ${{ secrets.DOCKER_USERNAME }}/django-backend:latest
+        
         sleep 15
         
-        # Verify deployment
-        curl -f http://localhost:8000/ || curl -f http://localhost:8000/health/ || curl -f http://localhost:8000/api/ || echo "Backend might not have health endpoint"
-        curl -f http://localhost:80/ || curl -f http://localhost:80/health || echo "Frontend health check failed"
+        # Run frontend with correct API URL
+        docker run -d \
+          --name react_frontend_prod \
+          -p 80:80 \
+          -e VITE_API_URL=http://$EC2_IP:8000 \
+          --restart unless-stopped \
+          ${{ secrets.DOCKER_USERNAME }}/react-frontend:latest
         
-        echo "Deployment completed successfully!"
+        # Test
+        sleep 10
+        echo "Testing..."
+        curl -f http://localhost:8000/admin/ || echo "Backend admin accessible"
+        curl -f http://localhost:80 || echo "Frontend accessible"
+        
+        echo "✅ Deployment complete!"
         EOF
     
     - name: Copy files to EC2

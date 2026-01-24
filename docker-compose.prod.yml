@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   backend:
-    image: ${DOCKER_USERNAME}/django-backend:latest
+    image: ${{ secrets.DOCKER_USERNAME }}/django-backend:latest
     container_name: django_backend_prod
     restart: always
     ports:
