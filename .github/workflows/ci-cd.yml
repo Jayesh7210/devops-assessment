@@ -116,16 +116,17 @@ jobs:
           # Login to Docker Hub
           echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
 
-          # Create Docker network for communication
-          docker network create app-network 2>/dev/null || true
+          # Create Docker network for communication (MUST be before stopping containers)
+          docker network create app-network 2>/dev/null || echo "Network already exists or created"
 
           # Stop and remove old containers
           echo "Stopping old containers..."
           docker stop django_backend_prod react_frontend_prod 2>/dev/null || true
           docker rm django_backend_prod react_frontend_prod 2>/dev/null || true
 
-          # Cleanup
-          docker system prune -f
+          # Cleanup images but NOT networks
+          echo "Cleaning up old images..."
+          docker image prune -f
 
           echo "Pulling latest images..."
           docker pull $DOCKER_USERNAME/django-backend:latest
@@ -177,6 +178,9 @@ jobs:
           echo "✅ Deployment completed successfully!"
           echo "🌐 Frontend URL: http://$EC2_IP"
           echo "⚙️  Backend URL: http://$EC2_IP:8000"
+          echo ""
+          echo "Current Docker networks:"
+          docker network ls
           EOF
 
           chmod +x deploy.sh
