@@ -102,7 +102,8 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: us-east-1
     
-     - name: Create deployment script
+    # In the "Create deployment script" step, change to:
+    - name: Create deployment script
       run: |
         cat > deploy.sh << 'EOF'
         #!/bin/bash
@@ -151,7 +152,7 @@ jobs:
         curl -f http://localhost:80 || echo "Frontend accessible"
         
         echo "✅ Deployment complete!"
-        EOF
+        EOF 
     
     - name: Copy files to EC2
       uses: appleboy/scp-action@v0.1.4
