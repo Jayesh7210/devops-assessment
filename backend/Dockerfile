@@ -1,4 +1,5 @@
 # backend/Dockerfile
+# -------------------
 # Stage 1: Builder
 FROM python:3.12-slim AS builder
 
@@ -11,10 +12,11 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --user --no-cache-dir -r requirements.txt
 
+# -------------------
 # Stage 2: Runtime
 FROM python:3.12-slim
 
@@ -24,7 +26,7 @@ WORKDIR /app
 RUN groupadd -g 1001 appgroup && \
     useradd -r -u 1001 -g appgroup appuser
 
-# Copy Python dependencies from builder
+# Copy Python dependencies
 COPY --from=builder /root/.local /home/appuser/.local
 
 # Copy application code
@@ -35,20 +37,20 @@ RUN chown -R appuser:appgroup /app
 
 USER appuser
 
-# Set environment variables
+# Environment variables
 ENV PATH="/home/appuser/.local/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
+# Collect static files at build time
+RUN python manage.py collectstatic --noinput
+
 # Expose port
 EXPOSE 8000
-# ENV DJANGO_ALLOWED_HOSTS="*"  
 
-# Health check and run
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health/ || exit 1
+# Healthcheck (REAL endpoint)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:8000/api/hello/ || exit 1
 
-RUN python manage.py collectstatic --noinput
 # Run Django
-# CMD ["sh", "-c", "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"]
-CMD ["sh", "-c", "python manage.py migrate && python manage.py collectstatic --noinput && python manage.py runserver 0.0.0.0:8000"]
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

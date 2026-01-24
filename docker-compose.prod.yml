@@ -2,8 +2,7 @@ version: '3.8'
 
 services:
   backend:
-    image: ${{ secrets.DOCKER_USERNAME }}/django-backend:latest
-    container_name: django_backend_prod
+    image: ${DOCKER_USERNAME}/django-backend:latest
     restart: always
     ports:
       - "8000:8000"
@@ -11,11 +10,19 @@ services:
       - DEBUG=False
       - DJANGO_ALLOWED_HOSTS=*
       - CORS_ALLOW_ALL_ORIGINS=True
+    networks:
+      - app-network
 
   frontend:
     image: ${DOCKER_USERNAME}/react-frontend:latest
-    container_name: react_frontend_prod
     restart: always
     ports:
       - "80:80"
-    # No depends_on or networks for standalone
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
