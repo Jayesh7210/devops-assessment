@@ -87,97 +87,122 @@ jobs:
           echo "Backend: ${{ env.BACKEND_IMAGE }}:latest"
           echo "Frontend: ${{ env.FRONTEND_IMAGE }}:latest"
 
-  deploy-aws:
-    needs: push-images
+    deploy-aws:
+     needs: push-images
     runs-on: ubuntu-latest
-
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
-
-      - name: Create deployment script
-        run: |
-          # Create deploy.sh with proper variable substitution
-          cat > deploy.sh << 'DEPLOY_EOF'
-          #!/bin/bash
-          set -e
-
-          echo "🚀 Starting deployment..."
-
-          # Get EC2 IP
-          EC2_IP=$(curl -s ifconfig.me)
-          echo "EC2 Public IP: $EC2_IP"
-
-          # Stop and remove old containers
-          docker stop django_backend_prod react_frontend_prod 2>/dev/null || true
-          docker rm django_backend_prod react_frontend_prod 2>/dev/null || true
-
-          # Login to DockerHub
-          echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
-
-          # Pull images
-          echo "Pulling Docker images..."
-          docker pull $DOCKER_USERNAME/django-backend:latest
-          docker pull $DOCKER_USERNAME/react-frontend:latest
-
-          # Run backend
-          echo "Starting backend..."
-          docker run -d \
-            --name django_backend_prod \
-            -p 8000:8000 \
-            -e DEBUG=False \
-            -e DJANGO_ALLOWED_HOSTS="localhost,127.0.0.1,$EC2_IP,*" \
-            -e CORS_ALLOW_ALL_ORIGINS=True \
-            --restart unless-stopped \
-            $DOCKER_USERNAME/django-backend:latest
-
-          echo "Waiting for backend to start..."
-          sleep 20
-
-          # Run frontend
-          echo "Starting frontend..."
-          docker run -d \
-            --name react_frontend_prod \
-            -p 80:80 \
-            -e VITE_API_URL=http://$EC2_IP:8000 \
-            --restart unless-stopped \
-            $DOCKER_USERNAME/react-frontend:latest
-
-          # Wait and test
-          echo "Waiting for frontend..."
-          sleep 15
-
-          echo "Testing deployment..."
-
-          echo "Testing backend (port 8000)..."
-          if curl -s -f http://localhost:8000/admin/ > /dev/null; then
-            echo "✅ Backend admin accessible"
-          else
-            echo "⚠️ Backend might not be fully started"
-          fi
-
-          echo "Testing frontend (port 80)..."
-          if curl -s -f http://localhost:80 > /dev/null; then
-            echo "✅ Frontend accessible"
-          else
-            echo "⚠️ Frontend might not be fully started"
-          fi
-
-          echo ""
-          echo "🌐 Application URLs:"
-          echo "Frontend: http://$EC2_IP"
-          echo "Backend API: http://$EC2_IP:8000"
-          echo "Django Admin: http://$EC2_IP:8000/admin/"
-          echo ""
-          echo "✅ Deployment complete!"
-          DEPLOY_EOF
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+    
+    - name: Create deployment script
+      run: |
+        # Create deploy.sh with placeholders
+        cat > deploy.sh << 'DEPLOY_EOF'
+        #!/bin/bash
+        set -e
+        
+        echo "🚀 Starting deployment..."
+        
+        # Get EC2 IP
+        EC2_IP=$(curl -s ifconfig.me)
+        echo "EC2 Public IP: \$EC2_IP"
+        
+        # Stop and remove old containers
+        docker stop django_backend_prod react_frontend_prod 2>/dev/null || true
+        docker rm django_backend_prod react_frontend_prod 2>/dev/null || true
+        
+        # Login to DockerHub
+        echo "\$DOCKER_PASSWORD" | docker login -u "\$DOCKER_USERNAME" --password-stdin
+        
+        # Pull images
+        echo "Pulling Docker images..."
+        docker pull "\$DOCKER_USERNAME/django-backend:latest"
+        docker pull "\$DOCKER_USERNAME/react-frontend:latest"
+        
+        # Run backend
+        echo "Starting backend..."
+        docker run -d \
+          --name django_backend_prod \
+          -p 8000:8000 \
+          -e DEBUG=False \
+          -e DJANGO_ALLOWED_HOSTS="localhost,127.0.0.1,\$EC2_IP,*" \
+          -e CORS_ALLOW_ALL_ORIGINS=True \
+          --restart unless-stopped \
+          "\$DOCKER_USERNAME/django-backend:latest"
+        
+        echo "Waiting for backend to start..."
+        sleep 20
+        
+        # Run frontend
+        echo "Starting frontend..."
+        docker run -d \
+          --name react_frontend_prod \
+          -p 80:80 \
+          -e VITE_API_URL="http://\$EC2_IP:8000" \
+          --restart unless-stopped \
+          "\$DOCKER_USERNAME/react-frontend:latest"
+        
+        # Wait and test
+        echo "Waiting for frontend..."
+        sleep 15
+        
+        echo "Testing deployment..."
+        
+        echo "Testing backend (port 8000)..."
+        if curl -s -f http://localhost:8000/admin/ > /dev/null; then
+          echo "✅ Backend admin accessible"
+        else
+          echo "⚠️ Backend might not be fully started"
+        fi
+        
+        echo "Testing frontend (port 80)..."
+        if curl -s -f http://localhost:80 > /dev/null; then
+          echo "✅ Frontend accessible"
+        else
+          echo "⚠️ Frontend might not be fully started"
+        fi
+        
+        echo ""
+        echo "🌐 Application URLs:"
+        echo "Frontend: http://\$EC2_IP"
+        echo "Backend API: http://\$EC2_IP:8000"
+        echo "Django Admin: http://\$EC2_IP:8000/admin/"
+        echo ""
+        echo "✅ Deployment complete!"
+        DEPLOY_EOF
+        
+        echo "Created deploy.sh script"
+    
+    - name: Copy files to EC2
+      uses: appleboy/scp-action@v0.1.4
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.EC2_SSH_KEY }}
+        source: "deploy.sh"
+        target: "/home/ubuntu/app"
+    
+    - name: Deploy to EC2
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.EC2_SSH_KEY }}
+        envs: |
+          DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD=${{ secrets.DOCKER_PASSWORD }}
+        script: |
+          cd /home/ubuntu/app
+          chmod +x deploy.sh
+          ./deploy.sh
 
           echo "Created deploy.sh script"
 
