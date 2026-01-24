@@ -50,6 +50,7 @@ jobs:
           echo "Testing frontend..."
           curl -f http://localhost:80 || exit 1
 
+
       - name: Cleanup
         if: always()
         run: docker-compose down
