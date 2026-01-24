@@ -1,5 +1,3 @@
-# backend/Dockerfile
-# -------------------
 # Stage 1: Builder
 FROM python:3.12-slim AS builder
 
@@ -42,15 +40,11 @@ ENV PATH="/home/appuser/.local/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# Collect static files at build time
-RUN python manage.py collectstatic --noinput
+# Create static directory
+RUN mkdir -p static
 
 # Expose port
 EXPOSE 8000
 
-# Healthcheck (REAL endpoint)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:8000/api/hello/ || exit 1
-
-# Run Django
+# Run Django (with debug false by default)
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

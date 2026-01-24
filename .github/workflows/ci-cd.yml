@@ -1,0 +1,205 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+
+env:
+  REGISTRY: docker.io
+  BACKEND_IMAGE: ${{ secrets.DOCKER_USERNAME }}/django-backend
+  FRONTEND_IMAGE: ${{ secrets.DOCKER_USERNAME }}/react-frontend
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Docker Compose
+        run: |
+          sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.6/docker-compose-$(uname -s)-$(uname -m)" \
+            -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
+          docker-compose --version
+
+      - name: Build Backend Image
+        run: |
+          docker build -t $BACKEND_IMAGE:test ./backend
+
+      - name: Build Frontend Image
+        run: |
+          docker build -t $FRONTEND_IMAGE:test ./frontend
+
+      - name: Run Containers for Testing
+        run: |
+          docker-compose -f docker-compose.test.yml up -d
+          sleep 30  # Increased sleep time for containers to start
+          
+          echo "Checking running containers..."
+          docker-compose -f docker-compose.test.yml ps
+          
+          echo "Testing backend API..."
+          curl --retry 5 --retry-delay 10 -f http://localhost:8000/api/hello/ || exit 1
+          
+          echo "Testing frontend..."
+          curl --retry 5 --retry-delay 10 -f http://localhost:80 || exit 1
+          
+          echo "✅ All tests passed!"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker-compose -f docker-compose.test.yml down
+          docker system prune -f
+
+  push-images:
+    needs: build-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build & Push Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ env.BACKEND_IMAGE }}:latest
+            ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+
+      - name: Build & Push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:latest
+            ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+
+  deploy-aws:
+    needs: push-images
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Create deploy.sh
+        run: |
+          cat > deploy.sh << 'EOF'
+          #!/bin/bash
+          set -e
+
+          echo "🚀 Starting deployment..."
+
+          # Get EC2 IP from metadata or use provided IP
+          EC2_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo "$EC2_IP_FROM_SECRETS")
+          echo "EC2 Public IP: $EC2_IP"
+
+          # Login to Docker Hub
+          echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+
+          # Stop and remove old containers
+          echo "Stopping old containers..."
+          docker stop django_backend_prod react_frontend_prod 2>/dev/null || true
+          docker rm django_backend_prod react_frontend_prod 2>/dev/null || true
+
+          # Remove old images to save space
+          docker image prune -f
+
+          echo "Pulling latest images..."
+          docker pull $DOCKER_USERNAME/django-backend:latest
+          docker pull $DOCKER_USERNAME/react-frontend:latest
+
+          echo "Starting backend..."
+          docker run -d \
+            --name django_backend_prod \
+            -p 8000:8000 \
+            -e DEBUG=False \
+            -e DJANGO_ALLOWED_HOSTS="localhost,127.0.0.1,$EC2_IP,*" \
+            --restart unless-stopped \
+            $DOCKER_USERNAME/django-backend:latest
+
+          echo "Waiting for backend to start..."
+          sleep 30
+
+          echo "Checking backend health..."
+          if curl -f http://localhost:8000/api/hello/; then
+            echo "✅ Backend is healthy!"
+          else
+            echo "❌ Backend health check failed!"
+            docker logs django_backend_prod
+            exit 1
+          fi
+
+          echo "Starting frontend..."
+          docker run -d \
+            --name react_frontend_prod \
+            -p 80:80 \
+            -e VITE_API_URL="http://$EC2_IP:8000" \
+            --restart unless-stopped \
+            $DOCKER_USERNAME/react-frontend:latest
+
+          echo "Waiting for frontend to start..."
+          sleep 10
+
+          echo "Checking frontend..."
+          if curl -f http://localhost:80; then
+            echo "✅ Frontend is running!"
+          else
+            echo "❌ Frontend check failed!"
+            docker logs react_frontend_prod
+            exit 1
+          fi
+
+          echo "✅ Deployment completed successfully!"
+          echo "🌐 Frontend URL: http://$EC2_IP"
+          echo "⚙️  Backend URL: http://$EC2_IP:8000"
+          EOF
+
+          chmod +x deploy.sh
+
+      - name: Copy deploy.sh to EC2
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: deploy.sh
+          target: /home/ubuntu
+
+      - name: Deploy on EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            export DOCKER_USERNAME="${{ secrets.DOCKER_USERNAME }}"
+            export DOCKER_PASSWORD="${{ secrets.DOCKER_PASSWORD }}"
+            
+            # Make sure we're in home directory
+            cd /home/ubuntu
+            
+            # Make script executable
+            chmod +x deploy.sh
+            
+            # Run deployment
+            ./deploy.sh

@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: django_backend_test
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=False
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+      - CORS_ALLOW_ALL_ORIGINS=True
+
+  frontend:
+    build: 
+      context: ./frontend
+      args:
+        - VITE_API_URL=http://localhost:8000
+    container_name: react_frontend_test
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
