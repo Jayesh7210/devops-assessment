@@ -33,9 +33,9 @@ jobs:
 
       - name: Run Containers for Testing
         run: |
-          docker-compose up -d
+          docker compose up -d
           sleep 20
-          docker-compose ps
+          docker compose ps
 
           echo "Testing backend API..."
           curl -f http://localhost:8000/api/hello/
@@ -46,7 +46,7 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          docker-compose down
+          docker compose down
 
 # -------------------------------------------------------------------
 # PUSH IMAGES
