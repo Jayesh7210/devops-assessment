@@ -102,7 +102,7 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: us-east-1
     
-        - name: Create deployment script
+    - name: Create deployment script
       run: |
         cat > deploy.sh << 'DEPLOY_EOF'
         #!/bin/bash
