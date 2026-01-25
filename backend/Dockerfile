@@ -1,4 +1,4 @@
-# backend/Dockerfile
+# Stage 1: Builder
 FROM python:3.12-slim AS builder
 
 WORKDIR /app
@@ -10,10 +10,11 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --user --no-cache-dir -r requirements.txt
 
+# -------------------
 # Stage 2: Runtime
 FROM python:3.12-slim
 
@@ -23,7 +24,7 @@ WORKDIR /app
 RUN groupadd -g 1001 appgroup && \
     useradd -r -u 1001 -g appgroup appuser
 
-# Copy Python dependencies from builder
+# Copy Python dependencies
 COPY --from=builder /root/.local /home/appuser/.local
 
 # Copy application code
@@ -34,14 +35,16 @@ RUN chown -R appuser:appgroup /app
 
 USER appuser
 
-# Set environment variables with defaults
+# Environment variables
 ENV PATH="/home/appuser/.local/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
-ENV DJANGO_ALLOWED_HOSTS="*"
-ENV DEBUG="False"
-ENV CORS_ALLOW_ALL_ORIGINS="True"
+ENV PYTHONDONTWRITEBYTECODE=1
 
+# Create static directory
+RUN mkdir -p static
+
+# Expose port
 EXPOSE 8000
 
-# Run migrations and start server
-CMD ["sh", "-c", "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"]
+# Run Django (with debug false by default)
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

@@ -1,40 +1,29 @@
-# frontend/Dockerfile
+# Build stage
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files first for better caching
 COPY package.json package-lock.json ./
 RUN npm ci
 
-# Copy all source files
 COPY . .
 
-# Set environment variable for production build
-ENV VITE_API_URL=/api
+# Use build arg for API URL
+ARG VITE_API_URL=http://localhost:8000
+ENV VITE_API_URL=$VITE_API_URL
 
-# Build the React app
 RUN npm run build
 
-# Stage 2: Production
+# Runtime stage
 FROM nginx:alpine
 
-# Remove default nginx config
-RUN rm /etc/nginx/conf.d/default.conf
-
-# Copy custom nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/
-
-# Copy built React app from builder stage
+# Copy built frontend
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Fix permissions
-RUN chown -R nginx:nginx /usr/share/nginx/html && \
-    chmod -R 755 /usr/share/nginx/html
-
-# Use nginx user
-USER nginx
+# Copy nginx config
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
+
 
 CMD ["nginx", "-g", "daemon off;"]
