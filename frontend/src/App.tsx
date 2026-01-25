@@ -12,7 +12,9 @@ function App() {
     setLoading(true)
     setError(null)
     try {
-      const response = await axios.get('http://localhost:8000/api/hello/')
+      // FIX: Use environment variable or relative path
+      const API_URL = import.meta.env.VITE_API_URL || '/api'
+      const response = await axios.get(`${API_URL}/hello/`)
       setMessage(response.data.message)
     } catch (err) {
       console.error(err)
