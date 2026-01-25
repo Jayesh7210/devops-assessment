@@ -53,7 +53,7 @@ A simple "Hello World" full-stack application built with **Django** (Backend) an
    ```
    The frontend will be available at `http://localhost:5173/`.
 
-## Architecture Decisions
+## Architecture Decisions 
 - **Vite**: Used for its superior development experience and fast build times.
 - **Django**: Chosen for its robustness and ease of setting up a structured API.
 - **CORS**: Configured in Django to allow the React frontend to fetch data during local development.
