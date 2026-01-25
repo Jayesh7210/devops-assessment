@@ -12,7 +12,7 @@ function App() {
     setLoading(true)
     setError(null)
     try {
-      const response = await axios.get('/api/hello/')
+      const response = await axios.get(':8000/api/hello/')
 
 
       setMessage(response.data.message)
