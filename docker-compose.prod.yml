@@ -3,18 +3,19 @@ version: '3.8'
 services:
   backend:
     image: ${DOCKER_USERNAME}/django-backend:latest
+    container_name: backend
     restart: always
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
       - DEBUG=False
       - DJANGO_ALLOWED_HOSTS=*
-      - CORS_ALLOW_ALL_ORIGINS=True
     networks:
       - app-network
 
   frontend:
     image: ${DOCKER_USERNAME}/react-frontend:latest
+    container_name: frontend
     restart: always
     ports:
       - "80:80"

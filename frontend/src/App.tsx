@@ -12,7 +12,8 @@ function App() {
     setLoading(true)
     setError(null)
     try {
-      const response = await axios.get('http://backend:8000/api/hello/')
+      const response = await axios.get('/api/hello/')
+
 
       setMessage(response.data.message)
     } catch (err) {
