@@ -5,7 +5,6 @@ Django settings for config project.
 import os
 from pathlib import Path
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.environ.get(
@@ -22,7 +21,6 @@ ALLOWED_HOSTS = os.environ.get(
     "localhost,127.0.0.1,backend"
 ).split(",")
 
-# Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
